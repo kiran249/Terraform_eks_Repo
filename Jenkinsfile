@@ -55,7 +55,27 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
-                sh 'terraform apply -input=false tfplan'
+                script {
+                    // Check the saved plan for a newly created (or replaced) bastion SSH key
+                    def newKey = sh(
+                        script: "terraform show -no-color tfplan | grep -qE 'tls_private_key\\.bastion (will be created|must be replaced)'",
+                        returnStatus: true
+                    ) == 0
+
+                    sh 'terraform apply -input=false tfplan'
+
+                    if (newKey) {
+                        echo 'New bastion SSH key was created - archiving bastion-key.pem for download.'
+                        sh '''
+                            set +x
+                            umask 077
+                            terraform output -raw bastion_ssh_private_key > bastion-key.pem
+                        '''
+                        archiveArtifacts artifacts: 'bastion-key.pem', fingerprint: true
+                    } else {
+                        echo 'Bastion SSH key unchanged - no new .pem to download.'
+                    }
+                }
             }
         }
 
