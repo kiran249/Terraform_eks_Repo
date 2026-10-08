@@ -26,3 +26,7 @@ override.tf.json
 .idea/
 *.swp
 *.swo
+
+# Keys and certificates
+*.pem
+*.key
