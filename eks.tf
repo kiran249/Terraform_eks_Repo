@@ -5,7 +5,8 @@ module "eks" {
   name               = var.cluster_name
   kubernetes_version = var.kubernetes_version
 
-  endpoint_public_access = true
+  endpoint_public_access  = true
+  endpoint_private_access = true
 
   enable_irsa = true
 
@@ -13,6 +14,22 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   enable_cluster_creator_admin_permissions = true
+
+  access_entries = {
+    bastion = {
+      principal_arn = aws_iam_role.bastion.arn
+      type          = "STANDARD"
+
+      policy_associations = {
+        cluster_admin = {
+          policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
 
   addons = {
     coredns = {
@@ -33,8 +50,8 @@ module "eks" {
   }
 
   eks_managed_node_groups = {
-    default = {
-      name = "default-node-group"
+    "${var.cluster_name}" = {
+      name = "${var.cluster_name}-node-group"
 
       instance_types = var.node_instance_types
 
