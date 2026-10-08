@@ -21,19 +21,19 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                bat 'terraform init -input=false'
+                sh 'terraform init -input=false'
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                bat 'terraform validate'
+                sh 'terraform validate'
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                bat 'terraform plan -input=false -out=tfplan'
+                sh 'terraform plan -input=false -out=tfplan'
             }
         }
 
@@ -55,7 +55,7 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
-                bat 'terraform apply -input=false tfplan'
+                sh 'terraform apply -input=false tfplan'
             }
         }
 
@@ -64,7 +64,7 @@ pipeline {
                 expression { params.ACTION == 'destroy' }
             }
             steps {
-                bat 'terraform destroy -input=false -auto-approve'
+                sh 'terraform destroy -input=false -auto-approve'
             }
         }
     }
