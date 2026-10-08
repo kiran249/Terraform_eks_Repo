@@ -38,9 +38,11 @@ resource "aws_security_group" "bastion" {
   }
 
   tags = {
-    Name        = "${var.cluster_name}-bastion-sg"
-    Environment = "dev"
-    ManagedBy   = "terraform"
+    Name = "${var.cluster_name}-bastion-sg"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -63,9 +65,7 @@ resource "aws_iam_role" "bastion" {
   })
 
   tags = {
-    Name        = "${var.cluster_name}-bastion-role"
-    Environment = "dev"
-    ManagedBy   = "terraform"
+    Name = "${var.cluster_name}-bastion-role"
   }
 }
 
@@ -94,7 +94,7 @@ resource "aws_iam_instance_profile" "bastion" {
   role = aws_iam_role.bastion.name
 }
 
-# --- Look up the latest Amazon Linux 2023 AMI ---
+# --- Look up the latest Amazon Linux 2023 AMI (standard, not minimal) ---
 
 data "aws_ami" "amazon_linux" {
   most_recent = true
@@ -102,7 +102,7 @@ data "aws_ami" "amazon_linux" {
 
   filter {
     name   = "name"
-    values = ["al2023-ami-*-x86_64"]
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 
   filter {
@@ -130,28 +130,28 @@ resource "aws_instance" "bastion" {
 
   user_data = <<-EOF
     #!/bin/bash
-    set -e
+    set -euxo pipefail
 
     # Update system packages
     dnf update -y
 
-    # Install kubectl
-    curl -LO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-    chmod +x kubectl
-    mv kubectl /usr/local/bin/
+    # AWS CLI v2 ships with AL2023 (package name: awscli-2); make sure it is present
+    dnf install -y awscli-2
 
-    # Install AWS CLI v2 (already present on AL2023, but ensure latest)
-    dnf install -y aws-cli-2
+    # Install kubectl
+    curl -fsSLo /tmp/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+    rm -f /tmp/kubectl
 
     # Install Helm
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | HELM_INSTALL_DIR=/usr/local/bin bash
 
     # Configure kubeconfig for the EKS cluster
-    sudo -u ec2-user bash -c 'aws eks update-kubeconfig --region ${var.aws_region} --name ${var.cluster_name}'
+    sudo -u ec2-user -i aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}
   EOF
 
   root_block_device {
-    volume_size = 30
+    volume_size = var.bastion_disk_size
     volume_type = "gp3"
     encrypted   = true
   }
@@ -163,10 +163,12 @@ resource "aws_instance" "bastion" {
   }
 
   tags = {
-    Name        = "${var.cluster_name}-bastion"
-    Environment = "dev"
-    Project     = "eks"
-    ManagedBy   = "terraform"
+    Name = "${var.cluster_name}-bastion"
+  }
+
+  lifecycle {
+    # A newer AL2023 AMI is published regularly; don't replace the bastion on every plan because of it
+    ignore_changes = [ami]
   }
 }
 

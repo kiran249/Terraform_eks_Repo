@@ -43,3 +43,8 @@ output "bastion_ssh_command" {
   description = "Command to SSH into the bastion host"
   value       = "ssh -i bastion-key.pem ec2-user@${aws_instance.bastion.public_ip}"
 }
+
+output "configure_kubectl" {
+  description = "Command to configure kubectl for this cluster"
+  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"
+}

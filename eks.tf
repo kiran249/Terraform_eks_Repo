@@ -13,37 +13,43 @@ module "eks" {
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
+  # Cluster-admin for the identity running Terraform (e.g. the Jenkins IAM user)
   enable_cluster_creator_admin_permissions = true
 
-  access_entries = {
-    bastion = {
-      principal_arn = aws_iam_role.bastion.arn
-      type          = "STANDARD"
+  access_entries = merge(
+    {
+      bastion = {
+        principal_arn = aws_iam_role.bastion.arn
+        type          = "STANDARD"
 
-      policy_associations = {
-        cluster_admin = {
-          policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
+        policy_associations = {
+          cluster_admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
           }
         }
       }
-    }
+    },
+    # Account root for AWS console access. Skipped when Terraform itself runs as root,
+    # because the creator entry above already covers that principal (duplicates fail).
+    var.grant_account_root_admin && !local.caller_is_root ? {
+      root = {
+        principal_arn = local.account_root
+        type          = "STANDARD"
 
-    root = {
-      principal_arn = "arn:aws:iam::077542728885:root"
-      type          = "STANDARD"
-
-      policy_associations = {
-        cluster_admin = {
-          policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
+        policy_associations = {
+          cluster_admin = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = {
+              type = "cluster"
+            }
           }
         }
       }
-    }
-  }
+    } : {}
+  )
 
   addons = {
     coredns = {
@@ -81,25 +87,31 @@ module "eks" {
 
       capacity_type = "ON_DEMAND"
 
-      disk_size = 30
-
       subnet_ids = module.vpc.private_subnets
 
+      # The module uses a custom launch template, where `disk_size` is ignored,
+      # so the root volume size must be set through block_device_mappings.
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = var.node_disk_size
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+          }
+        }
+      }
+
       labels = {
-        Environment = "dev"
+        Environment = var.environment
       }
 
       tags = {
-        Name        = "${var.cluster_name}-nodes"
-        Environment = "dev"
-        ManagedBy   = "terraform"
+        Name = "${var.cluster_name}-nodes"
       }
     }
   }
 
-  tags = {
-    Environment = "dev"
-    Project     = "eks"
-    ManagedBy   = "terraform"
-  }
+  tags = local.common_tags
 }

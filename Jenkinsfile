@@ -10,6 +10,13 @@ pipeline {
         AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
         AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
         AWS_DEFAULT_REGION    = 'us-east-1'
+        TF_IN_AUTOMATION      = 'true'
+        TF_INPUT              = 'false'
+    }
+
+    options {
+        // Never run two Terraform jobs against the same state at once
+        disableConcurrentBuilds()
     }
 
     stages {
@@ -21,19 +28,24 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                bat 'terraform init -input=false'
+                bat 'terraform init -input=false -reconfigure'
             }
         }
 
         stage('Terraform Validate') {
             steps {
+                bat 'terraform fmt -check -recursive'
                 bat 'terraform validate'
             }
         }
 
         stage('Terraform Plan') {
             steps {
-                bat 'terraform plan -input=false -out=tfplan'
+                script {
+                    // For destroy, generate a destroy plan so the approval step reviews what will be deleted
+                    def destroyFlag = params.ACTION == 'destroy' ? '-destroy ' : ''
+                    bat "terraform plan -input=false -lock-timeout=5m ${destroyFlag}-out=tfplan"
+                }
             }
         }
 
@@ -55,7 +67,7 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
-                bat 'terraform apply -input=false tfplan'
+                bat 'terraform apply -input=false -lock-timeout=5m tfplan'
             }
         }
 
@@ -64,7 +76,8 @@ pipeline {
                 expression { params.ACTION == 'destroy' }
             }
             steps {
-                bat 'terraform destroy -input=false -auto-approve'
+                // Applying a saved destroy plan performs exactly the reviewed deletion
+                bat 'terraform apply -input=false -lock-timeout=5m tfplan'
             }
         }
     }
