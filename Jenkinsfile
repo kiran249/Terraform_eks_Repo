@@ -3,6 +3,7 @@ pipeline {
 
     parameters {
         choice(name: 'ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Terraform action to perform')
+        booleanParam(name: 'AUTO_APPROVE', defaultValue: true, description: 'Automatically approve without manual input')
     }
 
     environment {
@@ -38,7 +39,10 @@ pipeline {
 
         stage('Approval') {
             when {
-                expression { params.ACTION != 'plan' }
+                allOf {
+                    expression { params.ACTION != 'plan' }
+                    expression { params.AUTO_APPROVE == false }
+                }
             }
             steps {
                 input message: "Review the plan above. Proceed with terraform ${params.ACTION}?",
