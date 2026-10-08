@@ -53,11 +53,13 @@ module "eks" {
 
     kube-proxy = {
       most_recent                 = true
+      before_compute              = true
       resolve_conflicts_on_create = "OVERWRITE"
     }
 
     vpc-cni = {
       most_recent                 = true
+      before_compute              = true
       resolve_conflicts_on_create = "OVERWRITE"
     }
 
