@@ -29,6 +29,20 @@ module "eks" {
         }
       }
     }
+
+    root = {
+      principal_arn = "arn:aws:iam::077542728885:root"
+      type          = "STANDARD"
+
+      policy_associations = {
+        cluster_admin = {
+          policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
   }
 
   addons = {
